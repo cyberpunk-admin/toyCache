@@ -1,7 +1,7 @@
 package toyCache
 
 import (
-	"github.com/toyCache/lru"
+	"github.com/toyCache/toyCache/lru"
 	"sync"
 )
 
