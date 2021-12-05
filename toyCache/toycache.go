@@ -2,6 +2,7 @@ package toyCache
 
 import (
 	"errors"
+	"github.com/toyCache/toyCache/singleflight"
 	"log"
 	"sync"
 )
@@ -12,6 +13,10 @@ type Group struct {
 	getter    Getter
 	mainCache cache
 	peers     PeerPicker
+
+	// loadGroup make sure that each key fetched once
+	// either in locally or remote
+	loadGroup *singleflight.Group
 }
 
 // Getter load data for a key
@@ -43,6 +48,7 @@ func NewGroup(name string, cacheByte int64, getter Getter) *Group {
 		name:      name,
 		getter:    getter,
 		mainCache: cache{cacheBytes: cacheByte},
+		loadGroup: &singleflight.Group{},
 	}
 	groups[name] = g
 	return g
@@ -100,14 +106,21 @@ func (g *Group) populateCache(key string, value ByteView) {
 }
 
 func (g *Group) load(key string) (value ByteView, err error) {
-	if g.peers != nil {
-		if peer, ok := g.peers.PickPeer(key); ok{
-			if value, err = g.getFromPeer(peer, key); err == nil {
-				return value, nil
+	// each key only fetched once regardless of the number of concurrent caller
+	view, err := g.loadGroup.Do(key, func() (interface{}, error) {
+		if g.peers != nil {
+			if peer, ok := g.peers.PickPeer(key); ok{
+				if value, err = g.getFromPeer(peer, key); err == nil {
+					return value, nil
+				}
+				log.Println("[toyCache] Failed to get from peer", err)
 			}
-			log.Println("[toyCache] Failed to get from peer", err)
 		}
+		return g.getLocally(key)
+	})
+	if err == nil {
+		return view.(ByteView), nil
 	}
-	return g.getLocally(key)
+	return
 }
 
