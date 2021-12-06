@@ -1,9 +1,10 @@
 package toyCache
 
+import pb "github.com/toyCache/toyCache/toycachepb"
 
 // PeerGetter is an interface must be implemented by a peer.
 type PeerGetter interface {
-	Get(group string, key string) ([]byte, error)
+	Get(in *pb.Request, out *pb.Response) error
 }
 
 // PeerPicker is an interface must be implemented to locate the peer

@@ -9,7 +9,7 @@ import (
 )
 
 var db = map[string]string{
-	"Tom":  "630",
+	"Tom":  "return true value",
 	"Jack": "532",
 	"Bob":  "700",
 }

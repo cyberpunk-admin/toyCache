@@ -3,6 +3,8 @@ package toyCache
 import (
 	"fmt"
 	"github.com/toyCache/toyCache/consistenthash"
+	pb "github.com/toyCache/toyCache/toycachepb"
+	"google.golang.org/protobuf/proto"
 	"io/ioutil"
 	"log"
 	"net/http"
@@ -95,12 +97,15 @@ func (h *HTTPPool) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	w.Header().Set("Content-Type", "application/octet-stream")
-	_, err = w.Write(view.ByteSlice())
-	_, err = w.Write([]byte("\n"))
+
+	// Write the value to the response body as a proto message
+	body, err := proto.Marshal(&pb.Response{Value: view.ByteSlice()})
 	if err != nil {
-		return
+		http.Error(w, err.Error(), http.StatusInternalServerError)
 	}
+
+	w.Header().Set("Content-Type", "application/octet-stream")
+	w.Write(body)
 }
 
 var _ PeerPicker = (*HTTPPool)(nil)
@@ -109,26 +114,30 @@ type httpGetter struct {
 	baseURL string
 }
 
-func (g *httpGetter) Get(group string, key string) ([]byte, error) {
+func (g *httpGetter) Get(in *pb.Request, out *pb.Response) error {
 	u := fmt.Sprintf("%v%v/%v",
 		g.baseURL,
-		url.QueryEscape(group),
-		url.QueryEscape(key),
+		url.QueryEscape(in.GetGroup()),
+		url.QueryEscape(in.GetKey()),
 		)
 	res, err := http.Get(u)
 	if err != nil {
-		return nil, err
+		return err
 	}
-
 	defer res.Body.Close()
+
 	if res.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("server returned %v",res.StatusCode)
+		return fmt.Errorf("server returned %v",res.StatusCode)
 	}
 	bytes, err := ioutil.ReadAll(res.Body)
 	if err != nil {
-		return nil, fmt.Errorf("reading response body %v", err)
+		return fmt.Errorf("reading response body %v", err)
 	}
-	return bytes, nil
+
+	if err = proto.Unmarshal(bytes, out); err != nil {
+		return err
+	}
+	return nil
 }
 
 var _ PeerGetter = (*httpGetter)(nil)
